@@ -43,6 +43,13 @@ INSTALLED=0
 SKIPPED=0
 
 for name in "${REQUESTED[@]}"; do
+  # An empty name would resolve to the directories themselves and make the
+  # `rm -rf "$dest"` below delete the whole skills directory.
+  if [[ -z "$name" ]]; then
+    echo "  ✗ empty skill name" >&2
+    exit 2
+  fi
+
   src="$SRC_DIR/$name"
   dest="$DEST_DIR/$name"
 

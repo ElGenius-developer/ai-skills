@@ -1,8 +1,16 @@
 # ai-skills
 
-A small, opinionated set of [Claude Code](https://claude.com/claude-code) **skills** and **hooks** for day-to-day engineering work: shipping branches safely, resolving merge conflicts without surprises, writing sane T-SQL, and getting answers without the filler.
+Browse on [skills.sh](https://skills.sh/ElGenius-developer/ai-skills) · install with `npx skills`
+
+A small, opinionated set of agent **skills** and **hooks** for day-to-day engineering work: shipping branches safely, resolving merge conflicts without surprises, writing sane T-SQL, and getting answers without the filler.
 
 Every skill here is designed around one principle: **the agent proposes, the human approves.** Nothing merges, commits, pushes, or resolves a conflict without an explicit "yes".
+
+```bash
+npx skills add https://github.com/ElGenius-developer/ai-skills --skill '*'
+```
+
+Built for [Claude Code](https://claude.com/claude-code), and installable into ~70 other agents via the [`skills`](https://github.com/vercel-labs/skills) CLI.
 
 ---
 
@@ -37,21 +45,39 @@ git-conflict-review  →  git-conflict-resolve  →  git-pr-merge
 
 ## Install
 
-### Skills
+### Skills — via `npx skills` (recommended)
+
+These skills follow the standard `skills/<name>/SKILL.md` layout, so the [`skills`](https://github.com/vercel-labs/skills) CLI installs them directly — no clone needed. It supports Claude Code, Codex, Cursor, Antigravity, Cline, OpenCode, and ~70 other agents.
+
+```bash
+# See what's in here
+npx skills add https://github.com/ElGenius-developer/ai-skills --list
+
+# Install one
+npx skills add https://github.com/ElGenius-developer/ai-skills --skill direct
+
+# Install several
+npx skills add https://github.com/ElGenius-developer/ai-skills --skill git-conflict-review --skill git-conflict-resolve --skill git-pr-merge
+
+# Install everything
+npx skills add https://github.com/ElGenius-developer/ai-skills --skill '*'
+```
+
+Useful flags: `-g` installs globally (`~/.claude/skills/`) instead of into the current project, `-a claude-code` targets a specific agent, `-y` skips prompts for CI.
+
+### Skills — via `install.sh`
+
+If you'd rather not depend on the CLI, the repo ships a plain installer that copies into `~/.claude/skills/`:
 
 ```bash
 git clone https://github.com/ElGenius-developer/ai-skills.git
 cd ai-skills
-./install.sh
+./install.sh                      # all skills
+./install.sh direct git-pr-merge  # a subset
+./install.sh --force              # overwrite existing
 ```
 
-`install.sh` copies each skill into `~/.claude/skills/`. It refuses to clobber an existing skill of the same name unless you pass `--force`.
-
-Install a subset:
-
-```bash
-./install.sh direct git-pr-merge
-```
+It refuses to clobber an existing skill of the same name unless you pass `--force`.
 
 Or copy by hand — a skill is just a directory:
 
@@ -59,11 +85,24 @@ Or copy by hand — a skill is just a directory:
 cp -R skills/direct ~/.claude/skills/
 ```
 
-Skills are auto-discovered. Claude Code picks them up on the next session; each skill's `description` frontmatter governs when it triggers.
+Either way, skills are auto-discovered. Claude Code picks them up on the next session; each skill's `description` frontmatter governs when it triggers.
+
+> **Heads-up on `-g`.** Global install writes into `~/.claude/skills/`. If you also keep hand-edited copies of these skills there, pick one owner for that directory — either let the CLI manage it, or keep editing by hand. Doing both will silently overwrite your local edits on the next `update`.
+
+### Updating and removing
+
+```bash
+npx skills list                  # what's installed
+npx skills update                # pull latest for all installed skills
+npx skills update direct         # just one
+npx skills remove direct         # uninstall
+```
+
+The CLI records installs in `skills-lock.json` at your project root — commit it if you want the team on the same versions. If you installed with `install.sh` instead, updating is `git pull && ./install.sh --force`, and removing is `rm -rf ~/.claude/skills/<name>`.
 
 ### Hooks
 
-Hooks are **not** installed by `install.sh` — they change how your agent behaves globally, so wire them up deliberately.
+Hooks are **not** installed by `npx skills` or by `install.sh` — that CLI installs skills only, and hooks change how your agent behaves globally, so wire them up deliberately.
 
 Copy the ones you want somewhere stable, then reference them from `~/.claude/settings.json` (global) or `.claude/settings.json` (per project):
 
@@ -99,7 +138,27 @@ Copy the ones you want somewhere stable, then reference them from `~/.claude/set
 
 Make them executable: `chmod +x ~/.claude/hooks/*.sh`
 
-**Requirements:** `bash`, `git`, `python3`. `pr-footprint.sh` also needs the [`gh`](https://cli.github.com/) CLI; `proof-of-execution.sh` needs `jq`. Every hook fails open — if a dependency is missing it exits 0 and gets out of your way, except `block-push-to-main.sh`, which is a deliberate blocker.
+Every hook fails open — if a dependency is missing or the command can't be read, it exits 0 and gets out of your way. `block-push-to-main.sh` blocks only when it can actually read the command and that command targets `main`.
+
+Full per-hook detail — arguments, exit codes, and how to test each one — is in [`hooks/README.md`](hooks/README.md).
+
+---
+
+## Requirements
+
+Skills are Markdown; they need nothing installed. The bundled **scripts** and **hooks** do:
+
+| Component | Needs | Notes |
+|---|---|---|
+| `direct`, `sql-server-dba` | — | Pure Markdown instructions. |
+| `git-conflict-review` script | `bash`, `git` | `git ≥ 2.38` for in-memory `merge-tree`; older git uses a throwaway-worktree fallback. |
+| `git-conflict-resolve` | `bash`, `git` | No script — the agent drives `git` directly. |
+| `git-pr-merge` script | `bash`, `git`, [`gh`](https://cli.github.com/) | `gh` must be authenticated (`gh auth login`). GitHub only. |
+| `block-push-to-main.sh` | `bash`, `git`, `python3` | `python3` parses the hook's JSON stdin. |
+| `pr-footprint.sh` | `bash`, `git`, `python3`, `gh` | Posts a PR comment; needs push/comment scope. |
+| `proof-of-execution.sh` | `bash`, `jq` | `jq` reads the session transcript. |
+
+Tested on macOS and Linux. Windows users should run these under WSL or Git Bash.
 
 ---
 
@@ -116,6 +175,16 @@ bash skills/git-conflict-review/scripts/detect_conflicts.sh <source-ref> <target
 ```
 
 **Tuning:** the severity heuristics in `classify_severity()` are tuned for Laravel + TypeScript layouts (`*/Controllers/*`, `*/features/*`, `*.tsx`, …). If your repo looks different, edit that `case` block — it's the one part of this repo you're expected to customize.
+
+### `git-conflict-resolve`
+
+The only skill here with no script — it drives `git` directly, one conflict block at a time. For each block it shows the surrounding context, describes "ours" and "theirs" in a sentence each, proposes a resolution with reasoning, and then stops for an explicit choice: **Accept proposed / Keep ours / Keep theirs / Skip (edit manually)**.
+
+It will not stage, commit, continue a rebase, or push without a separate approval at each step, and it never runs `--abort`, `reset --hard`, or `clean -fd` unless you say "abort".
+
+[`references/resolution-patterns.md`](skills/git-conflict-resolve/references/resolution-patterns.md) carries ten worked patterns — import blocks, route registrations, lockfiles, i18n files, migrations, schema docs, generated API specs, whitespace-only diffs, conflict markers inside strings, and delete-modify — each with a default action and a note on when to escalate to a human instead.
+
+Lockfiles and generated specs are always **regenerate, never hand-merge**.
 
 ### `git-pr-merge`
 
@@ -155,11 +224,41 @@ Shared rules across these skills, in case you fork or extend them:
 
 ---
 
+## Troubleshooting
+
+**A skill never triggers.** Triggering is driven entirely by the `description` in each `SKILL.md` frontmatter — these are written narrowly on purpose, so vague prompts won't fire the wrong skill. Either name the skill directly ("use git-conflict-review") or widen the `description` in your own copy. Also confirm it's actually installed: `npx skills list`.
+
+**`detect_conflicts.sh` reports "Already merged"** — the source branch is an ancestor of the target, so there is genuinely nothing to merge. Check you didn't swap the argument order; it's `<source> <target>`, not the reverse.
+
+**Everything lands as MEDIUM severity.** The `classify_severity()` globs didn't match your layout. Edit that `case` block — see the tuning note above.
+
+**`pr_safety_check.sh` blocks on "gh CLI not authenticated"** — run `gh auth login`. The check is deliberately hard-fail because the later steps can't work without it.
+
+**`proof-of-execution.sh` never fires.** It only enforces when the agent already uses the `[STATUS]:` convention; text without that marker passes through untouched. It also silently exits 0 if `jq` is missing or the transcript can't be read.
+
+**`block-push-to-main.sh` blocks a push you actually want** (e.g. the initial push of a brand-new repo). Push a branch and open a PR, or temporarily unregister the hook — the script has no override flag by design.
+
+---
+
+## Verification status
+
+Being explicit about what has and hasn't been exercised:
+
+| Component | Status |
+|---|---|
+| `detect_conflicts.sh` | **Verified** — synthetic repo covering `content`, `add-add`, and `delete-modify` conflicts. Severity ranking, type detection, exit codes, and read-only guarantee all confirmed. |
+| `pr_safety_check.sh` | **Verified** — BLOCK on `.env`, BLOCK on leftover conflict markers, PASS on a clean branch, warnings on debug prints and focused tests. |
+| `block-push-to-main.sh` | **Verified** — blocks `origin main` and `HEAD:main`, allows feature branches and non-push commands. |
+| `proof-of-execution.sh` | **Verified** — blocks a bare `[STATUS]: done` and an empty `[STDOUT]:` block; allows a real one and allows text with no claim. |
+| `install.sh` | **Verified** — all/subset/`--force`/unknown-name/empty-name paths. |
+| `git-conflict-resolve` | **Not yet exercised end-to-end.** It has no script, so its per-block approval loop has only been reviewed, not run against a real conflict. Treat it as the least battle-tested skill here. |
+| `pr-footprint.sh` | **Not yet exercised** against a live PR. |
+
 ## Authorship
 
-Written by [Ahmed Ashraf](https://github.com/ElGenius-developer), authored collaboratively with Claude Code and extracted from real day-to-day use. The git-workflow scripts have been smoke-tested against synthetic repos covering content, `add-add`, and `delete-modify` conflicts, plus the block/pass paths of the PR safety check.
+Written by [Ahmed Ashraf](https://github.com/ElGenius-developer), authored collaboratively with Claude Code and extracted from real day-to-day use.
 
-Issues and PRs welcome. If you adapt the severity heuristics for a different stack, that's a genuinely useful contribution.
+Issues and PRs welcome — see [CONTRIBUTING.md](CONTRIBUTING.md). If you adapt the severity heuristics for a different stack, that's a genuinely useful contribution.
 
 ## License
 
