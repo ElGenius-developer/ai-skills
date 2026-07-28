@@ -99,7 +99,7 @@ Copy the ones you want somewhere stable, then reference them from `~/.claude/set
 
 Make them executable: `chmod +x ~/.claude/hooks/*.sh`
 
-**Requirements:** `bash`, `git`, `python3`. `pr-footprint.sh` also needs the [`gh`](https://cli.github.com/) CLI; `proof-of-execution.sh` needs `jq`. Every hook fails open — if a dependency is missing it exits 0 and gets out of your way, except `block-push-to-main.sh`, which is a deliberate blocker.
+**Requirements:** `bash`, `git`, `python3`. `pr-footprint.sh` also needs the [`gh`](https://cli.github.com/) CLI; `proof-of-execution.sh` needs `jq`. Every hook fails open — if a dependency is missing or the command can't be read, it exits 0 and gets out of your way. `block-push-to-main.sh` blocks only when it can actually read the command and that command targets `main`.
 
 ---
 
