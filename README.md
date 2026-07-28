@@ -1,6 +1,6 @@
 # ai-skills
 
-[![skills.sh](https://skills.sh/b/ElGenius-developer/ai-skills)](https://skills.sh/ElGenius-developer/ai-skills)
+Browse on [skills.sh](https://skills.sh/ElGenius-developer/ai-skills) · install with `npx skills`
 
 A small, opinionated set of agent **skills** and **hooks** for day-to-day engineering work: shipping branches safely, resolving merge conflicts without surprises, writing sane T-SQL, and getting answers without the filler.
 
