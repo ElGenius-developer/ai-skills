@@ -1,8 +1,16 @@
 # ai-skills
 
-A small, opinionated set of [Claude Code](https://claude.com/claude-code) **skills** and **hooks** for day-to-day engineering work: shipping branches safely, resolving merge conflicts without surprises, writing sane T-SQL, and getting answers without the filler.
+[![skills.sh](https://skills.sh/b/ElGenius-developer/ai-skills)](https://skills.sh/ElGenius-developer/ai-skills)
+
+A small, opinionated set of agent **skills** and **hooks** for day-to-day engineering work: shipping branches safely, resolving merge conflicts without surprises, writing sane T-SQL, and getting answers without the filler.
 
 Every skill here is designed around one principle: **the agent proposes, the human approves.** Nothing merges, commits, pushes, or resolves a conflict without an explicit "yes".
+
+```bash
+npx skills add https://github.com/ElGenius-developer/ai-skills --skill '*'
+```
+
+Built for [Claude Code](https://claude.com/claude-code), and installable into ~70 other agents via the [`skills`](https://github.com/vercel-labs/skills) CLI.
 
 ---
 
@@ -37,21 +45,39 @@ git-conflict-review  →  git-conflict-resolve  →  git-pr-merge
 
 ## Install
 
-### Skills
+### Skills — via `npx skills` (recommended)
+
+These skills follow the standard `skills/<name>/SKILL.md` layout, so the [`skills`](https://github.com/vercel-labs/skills) CLI installs them directly — no clone needed. It supports Claude Code, Codex, Cursor, Antigravity, Cline, OpenCode, and ~70 other agents.
+
+```bash
+# See what's in here
+npx skills add https://github.com/ElGenius-developer/ai-skills --list
+
+# Install one
+npx skills add https://github.com/ElGenius-developer/ai-skills --skill direct
+
+# Install several
+npx skills add https://github.com/ElGenius-developer/ai-skills --skill git-conflict-review --skill git-conflict-resolve --skill git-pr-merge
+
+# Install everything
+npx skills add https://github.com/ElGenius-developer/ai-skills --skill '*'
+```
+
+Useful flags: `-g` installs globally (`~/.claude/skills/`) instead of into the current project, `-a claude-code` targets a specific agent, `-y` skips prompts for CI.
+
+### Skills — via `install.sh`
+
+If you'd rather not depend on the CLI, the repo ships a plain installer that copies into `~/.claude/skills/`:
 
 ```bash
 git clone https://github.com/ElGenius-developer/ai-skills.git
 cd ai-skills
-./install.sh
+./install.sh                      # all skills
+./install.sh direct git-pr-merge  # a subset
+./install.sh --force              # overwrite existing
 ```
 
-`install.sh` copies each skill into `~/.claude/skills/`. It refuses to clobber an existing skill of the same name unless you pass `--force`.
-
-Install a subset:
-
-```bash
-./install.sh direct git-pr-merge
-```
+It refuses to clobber an existing skill of the same name unless you pass `--force`.
 
 Or copy by hand — a skill is just a directory:
 
@@ -59,7 +85,7 @@ Or copy by hand — a skill is just a directory:
 cp -R skills/direct ~/.claude/skills/
 ```
 
-Skills are auto-discovered. Claude Code picks them up on the next session; each skill's `description` frontmatter governs when it triggers.
+Either way, skills are auto-discovered. Claude Code picks them up on the next session; each skill's `description` frontmatter governs when it triggers.
 
 ### Hooks
 
