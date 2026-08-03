@@ -24,6 +24,7 @@ Built for [Claude Code](https://claude.com/claude-code), and installable into ~7
 | [`git-conflict-review`](skills/git-conflict-review) | Predicts merge conflicts between two branches **without touching the working tree**. Reports each conflicting file, its conflict type, and a risk-ranked resolution order. |
 | [`git-conflict-resolve`](skills/git-conflict-resolve) | Walks every conflict block one at a time with a proposed resolution and a mandatory approval prompt. Never auto-resolves, never commits unasked. |
 | [`git-pr-merge`](skills/git-pr-merge) | Takes a clean branch from "ready" to "merged": push → open PR → structured diff review → wait for CI → squash-merge, with an approval gate at every state change. |
+| [`pr-guard`](skills/pr-guard) | Review-and-merge gate for an **existing** PR: parallel security / code-review / clean-code / test-quality lenses, real test runs, CI + conflict checks, a written review report — then a squash merge that only happens on explicit user approval. CRITICAL/HIGH findings block the merge. Supports a thin per-project wrapper skill for repo-specific gates. |
 | [`sql-server-dba`](skills/sql-server-dba) | SQL Server / T-SQL assistant: query optimization, stored-procedure patterns, index design, security review, and DMV-based performance troubleshooting. |
 
 The three `git-*` skills form a pipeline — **review → resolve → merge** — but each works standalone.
