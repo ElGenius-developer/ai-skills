@@ -20,6 +20,7 @@ Built for [Claude Code](https://claude.com/claude-code), and installable into ~7
 
 | Skill | What it does |
 |---|---|
+| [`ahmed-humanizer`](skills/ahmed-humanizer) | Writes and rewrites casual/team messages in Ahmed's own voice: natural Egyptian Arabic with English tech terms, conversational connectors and check-ins, or simple everyday English. Strips AI writing tells (banned words, em-dashes, bold-header lists). Skips formal emails and docs unless asked. |
 | [`direct`](skills/direct) | A persistent terse-communication mode. Strips greetings, hedging, filler, and self-narration while keeping every technical fact intact. Mirrors the user's language. |
 | [`git-conflict-review`](skills/git-conflict-review) | Predicts merge conflicts between two branches **without touching the working tree**. Reports each conflicting file, its conflict type, and a risk-ranked resolution order. |
 | [`git-conflict-resolve`](skills/git-conflict-resolve) | Walks every conflict block one at a time with a proposed resolution and a mandatory approval prompt. Never auto-resolves, never commits unasked. |
