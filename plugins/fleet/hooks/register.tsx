@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import type { FleetJob } from '../types'
-import { basename, elapsed, pickOutDir, relayLaunch } from './parse'
+import { NEVER_STARTED_MS, basename, elapsed, pickOutDir, relayLaunch } from './parse'
 
 const PANE = 'fleet'
 const POLL_MS = 5_000
@@ -11,17 +11,36 @@ const now = atom({ plugin: 'fleet', key: 'now' } as const, 0)
 
 const STATUS_COLOR: Record<string, string> = { running: 'warning', completed: 'success' }
 
+function repoOf(job: FleetJob): string {
+  return job.cd ? basename(job.cd) : 'repo'
+}
+
 // A relay given no --out-dir writes to $TMPDIR/delegate-relay/<repo>-<timestamp>.
-async function findOutDir($: EngineInterface, job: FleetJob, claimed: ReadonlySet<string>): Promise<string | null> {
+async function findOutDir(
+  $: EngineInterface,
+  job: FleetJob,
+  otherStarts: readonly number[],
+  claimed: ReadonlySet<string>,
+): Promise<string | null> {
   const tmp = ((await $.env.get('TMPDIR')) ?? '/tmp').replace(/\/+$/, '')
   const root = `${tmp}/delegate-relay`
   if (!(await $.fs.exists(root))) return null
-  return pickOutDir(root, await $.fs.list(root), job.cd ? basename(job.cd) : 'repo', job.startedAt, claimed)
+  return pickOutDir(root, await $.fs.list(root), repoOf(job), job.startedAt, otherStarts, claimed)
 }
 
-async function settle($: EngineInterface, job: FleetJob, claimed: ReadonlySet<string>): Promise<FleetJob> {
-  const outDir = job.outDir ?? (await findOutDir($, job, claimed))
-  if (!outDir || !(await $.fs.exists(`${outDir}/result.json`))) return { ...job, outDir }
+async function settle(
+  $: EngineInterface,
+  job: FleetJob,
+  otherStarts: readonly number[],
+  claimed: ReadonlySet<string>,
+): Promise<FleetJob> {
+  const outDir = job.outDir ?? (await findOutDir($, job, otherStarts, claimed))
+  // A background launch that dies on a usage error returns no error and makes no folder.
+  if (!outDir || !(await $.fs.exists(outDir))) {
+    const at = await $.clock.now()
+    return at - job.startedAt > NEVER_STARTED_MS ? { ...job, status: 'failed', finishedAt: at } : job
+  }
+  if (!(await $.fs.exists(`${outDir}/result.json`))) return { ...job, outDir }
   const result = JSON.parse(String(await $.fs.read(`${outDir}/result.json`))) as {
     status?: string
     touchedFiles?: unknown[] | null
@@ -44,7 +63,8 @@ async function poll($: EngineInterface) {
   const claimed = new Set(list.flatMap(j => (j.outDir ? [j.outDir] : [])))
   const settled: FleetJob[] = []
   for (const job of list) {
-    const next = job.status === 'running' ? await settle($, job, claimed) : job
+    const otherStarts = list.filter(o => o.id !== job.id && repoOf(o) === repoOf(job)).map(o => o.startedAt)
+    const next = job.status === 'running' ? await settle($, job, otherStarts, claimed) : job
     if (next.outDir) claimed.add(next.outDir)
     if (job.status === 'running' && next.status !== 'running') {
       $.ui.toast(`${next.lane} finished: ${next.status}${next.touched !== null ? `, ${next.touched} files` : ''}`)

@@ -13,24 +13,38 @@ export function relayLaunch(command: string): { lane: string; cd: string | null;
 
 export type DirEntry = { name: string; kind: string; mtimeMs: number }
 
+/** A relay makes its folder within a second of launch; one with none after this never started. */
+export const NEVER_STARTED_MS = 30_000
+const CLOCK_SKEW_MS = 2_000
+
+/** When the relay made `<repo>-<ISO time, ':' and '.' as '-'>[-pid]`, or null for another repo's folder. */
+export function folderTime(name: string, repo: string): number | null {
+  if (!name.startsWith(`${repo}-`)) return null
+  const m = name.slice(repo.length + 1).match(/^(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})-(\d{3})Z/)
+  return m ? Date.parse(`${m[1]}T${m[2]}:${m[3]}:${m[4]}.${m[5]}Z`) : null
+}
+
 /**
- * The out-dir a relay with no --out-dir made for this job: `<root>/<repo>-<ISO timestamp>`,
- * made after the launch and not claimed by another job. Jobs settle oldest first, so each
- * takes the oldest such folder; a sibling repo like `<repo>-admin` never matches.
+ * The out-dir a relay with no --out-dir made for this job: the oldest unclaimed `<repo>-<time>`
+ * folder made after the launch and before any later launch in the same repo, so a relay that
+ * never started cannot take the next one's folder.
  */
 export function pickOutDir(
   root: string,
   entries: readonly DirEntry[],
   repo: string,
   startedAt: number,
+  otherStarts: readonly number[],
   claimed: ReadonlySet<string>,
 ): string | null {
-  const own = new RegExp(`^${repo.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}-\\d{4}-\\d{2}-\\d{2}T`)
-  const candidates = entries
-    .filter(d => d.kind === 'dir' && own.test(d.name) && d.mtimeMs >= startedAt - 5_000)
-    .map(d => `${root}/${d.name}`)
-    .filter(path => !claimed.has(path))
-  return candidates.sort()[0] ?? null
+  const candidates = entries.flatMap(d => {
+    const madeAt = d.kind === 'dir' ? folderTime(d.name, repo) : null
+    if (madeAt === null || madeAt < startedAt - CLOCK_SKEW_MS) return []
+    if (otherStarts.some(s => s > startedAt && s <= madeAt)) return []
+    const path = `${root}/${d.name}`
+    return claimed.has(path) ? [] : [{ path, madeAt }]
+  })
+  return candidates.sort((a, b) => a.madeAt - b.madeAt)[0]?.path ?? null
 }
 
 export function basename(path: string): string {
