@@ -1,54 +1,31 @@
 const RELAY = /([a-z]+)-delegate\/scripts\/relay\.mjs/
+const HELP = /\s(--help|-h)(?=\s|$)/
+const SAFE_PATH = /^[A-Za-z0-9_./-]+$/
 
 function flag(command: string, name: string): string | null {
   const m = command.match(new RegExp(`--${name}[ =](?:"([^"]+)"|'([^']+)'|(\\S+))`))
   return m ? (m[1] ?? m[2] ?? m[3] ?? null) : null
 }
 
-export function relayLaunch(
-  command: string,
-): { lane: string; cd: string | null; outDir: string | null; briefPath: string } | null {
+export function relayLaunch(command: string): { lane: string; cd: string | null; outDir: string | null } | null {
   const m = command.match(RELAY)
-  const briefPath = m ? flag(command, 'brief') : null
-  if (!m || !briefPath) return null
-  return { lane: m[1]!, cd: flag(command, 'cd'), outDir: flag(command, 'out-dir'), briefPath }
+  if (!m || HELP.test(command)) return null
+  return { lane: m[1]!, cd: flag(command, 'cd'), outDir: flag(command, 'out-dir') }
 }
-
-/** A relay makes its folder within a second of launch; one with none after this never started. */
-export const NEVER_STARTED_MS = 30_000
-export const CLOCK_SKEW_MS = 2_000
-
-/** The repo and time in a relay folder name, `<repo>-<ISO time, ':' and '.' as '-'>[-pid]`. */
-export function folderName(name: string): { repo: string; madeAt: number } | null {
-  const m = name.match(/^(.+)-(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})-(\d{3})Z(?:-\d+)?$/)
-  return m ? { repo: m[1]!, madeAt: Date.parse(`${m[2]}T${m[3]}:${m[4]}:${m[5]}.${m[6]}Z`) } : null
-}
-
-export type Folder = { path: string; repo: string; madeAt: number; brief: string | null }
-export type Launch = { startedAt: number; brief: string | null; repo: string }
 
 /**
- * The out-dir a relay with no --out-dir made for this job: the oldest unclaimed folder made
- * after the launch whose brief.txt holds the job's brief. A relay launched later with the same
- * brief bounds it, so one that never started cannot take its twin's folder. With no brief to
- * compare, the oldest unclaimed folder of the job's repo.
+ * The command with `--out-dir <dir>` right after the relay script, so an allow rule on the
+ * command's prefix still matches; null when it can't go in unquoted.
  */
-export function pickOutDir(
-  folders: readonly Folder[],
-  job: Launch,
-  others: readonly Launch[],
-  claimed: ReadonlySet<string>,
-): string | null {
-  const laterTwins = job.brief === null ? [] : others.filter(o => o.brief === job.brief && o.startedAt > job.startedAt)
-  const fits = folders.filter(
-    f =>
-      !claimed.has(f.path) &&
-      f.madeAt >= job.startedAt - CLOCK_SKEW_MS &&
-      (job.brief === null ? f.repo === job.repo : f.brief === job.brief) &&
-      !laterTwins.some(o => o.startedAt <= f.madeAt),
-  )
-  return fits.sort((a, b) => a.madeAt - b.madeAt)[0]?.path ?? null
+export function withOutDir(command: string, dir: string): string | null {
+  const m = command.match(/relay\.mjs(?=\s|$)/)
+  if (!m || m.index === undefined || !SAFE_PATH.test(dir)) return null
+  const end = m.index + m[0].length
+  return `${command.slice(0, end)} --out-dir ${dir}${command.slice(end)}`
 }
+
+/** A relay makes its out-dir within a second of starting; one with none after this never started. */
+export const NEVER_STARTED_MS = 30_000
 
 export function basename(path: string): string {
   return path.replace(/\/+$/, '').split('/').pop() || 'repo'

@@ -3,8 +3,6 @@ export type FleetJob = {
   lane: string
   cd: string | null
   outDir: string | null
-  /** The brief text the relay was given, to find its folder by; null when it couldn't be read. */
-  brief: string | null
   startedAt: number
   /** When the Bash call returned; null while it waits, e.g. on a permission prompt. */
   launchedAt: number | null
