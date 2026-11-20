@@ -124,6 +124,53 @@ test('after /resume the rail shows only the resumed session\'s prompts', async (
   await ui.unmount()
 })
 
+test('an old row that redraws while the resumed transcript is still being read stays off the rail', async ($, on) => {
+  const clock = mock.clock(on)
+  on('ui.render', () => engine)
+  on('classic.SessionStart', () => ({}))
+  const resumed = { type: 'user', uuid: 'c1', message: { role: 'user', content: 'Slow resumed question' } }
+  on('fs.read', async () => {
+    await clock.sleep(100)
+    return { value: JSON.stringify(resumed) }
+  })
+
+  const old = await $.ui.mount(userRow('o1', 'Left prompt'))
+  await old.unmount()
+  let isDone = false
+  const starting = $.classic.SessionStart({ source: 'resume', transcript_path: '/t/c.jsonl' } as never).then(() => { isDone = true })
+  await clock.settle()
+  expect(isDone).toBe(false)
+  const redrawn = await $.ui.mount(userRow('o1', 'Left prompt'))
+  await redrawn.unmount()
+  await clock.advance(100)
+  await starting
+
+  const ui = await $.ui.mount(pane('terminal'))
+  expect(await ui.find({ type: 'Text', text: /Slow resumed question/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /Left prompt/ })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('a fork whose transcript cannot be read still fills the rail from the rows it draws', async ($, on) => {
+  const clock = mock.clock(on)
+  on('ui.render', () => engine)
+  on('classic.SessionStart', () => ({}))
+  on('fs.read', () => {
+    throw new Error('over the read limit')
+  })
+
+  const before = await $.ui.mount(userRow('f1', 'Prompt kept by the fork'))
+  await before.unmount()
+  await $.classic.SessionStart({ source: 'fork', transcript_path: '/t/big.jsonl' } as never)
+  await clock.advance(5_000)
+  const after = await $.ui.mount(userRow('f1', 'Prompt kept by the fork'))
+  await after.unmount()
+
+  const ui = await $.ui.mount(pane('terminal'))
+  expect(await ui.find({ type: 'Text', text: /Prompt kept by the fork/ })).toBeDefined()
+  await ui.unmount()
+})
+
 test('a long message folds to one line and unfolds back to Claude Code\'s drawing', async ($, on) => {
   mock.clock(on)
   on('ui.render', () => engine)

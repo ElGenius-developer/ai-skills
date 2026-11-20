@@ -6,6 +6,7 @@ const LONG_CHARS = 240
 const LONG_LINES = 4
 const CARD_WIDTH = 46
 const REPLY_CHARS = 220
+const STALE_MS = 2_000
 const TICK = { rest: '──', here: '───', last: '────' } as const
 
 export type Kind = 'user' | 'assistant'
@@ -173,8 +174,9 @@ export const register: Register = on => {
   on('classic.SessionStart', async ($, e, next) => {
     // /clear, /resume and a fork switch to another conversation in the same process
     const isSwitch = e.source === 'clear' || e.source === 'resume' || e.source === 'fork'
-    const left = isSwitch ? [...entries.keys()] : []
     if (isSwitch) {
+      // Marked before the read: the left conversation's rows keep drawing until the transcript is cut
+      for (const id of entries.keys()) stale.add(id)
       entries.clear()
       visible.clear()
       overrides.clear()
@@ -183,12 +185,15 @@ export const register: Register = on => {
     if (typeof e.transcript_path === 'string' && e.source !== 'clear') {
       await loadTranscript($, e.transcript_path)
     }
-    // A fork keeps the same row ids, so only ids the new transcript lacks are stale;
-    // resuming back into a conversation makes its ids live again
-    for (const id of left) {
-      if (!entries.has(id)) stale.add(id)
-    }
+    // A fork, or resuming back, brings the same row ids
     for (const id of entries.keys()) stale.delete(id)
+    if (isSwitch) {
+      // ponytail: fixed wait for the cut; rows that draw after it (an unreadable transcript) fill the rail again
+      $.clock.after(STALE_MS, () => {
+        stale.clear()
+        $.ui.invalidate('ui.render')
+      })
+    }
     $.ui.invalidate('ui.render')
     return next(e)
   }).catch(async ($, e, next) => next(e))
