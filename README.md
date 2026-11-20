@@ -43,6 +43,20 @@ git-conflict-review  →  git-conflict-resolve  →  git-pr-merge
 | [`pr-footprint.sh`](hooks/pr-footprint.sh) | `PostToolUse(Bash)` | After `gh pr create`, posts a "PR Footprint" comment with objective git-derived counts (lines, files, new dependencies). Never invents a baseline or a "% saved" figure. |
 | [`proof-of-execution.sh`](hooks/proof-of-execution.sh) | `Stop` | Blocks an agent from claiming `[STATUS]: done` unless it pasted real command output in a `[STDOUT]:` block. An anti-silent-failure gate. |
 
+### Plugins (Claude Code)
+
+Interface plugins built on Claude Code's plugin hooks API (a `hooks/register.tsx` module per plugin). Tested on Claude Code 2.1.329.
+
+| Plugin | What it does |
+|---|---|
+| [`chat-colors`](plugins/chat-colors) | Draws your prompts and Claude's replies as colored chat bubbles. Both colors are plugin options. |
+| [`code-card`](plugins/code-card) | Draws each code block in a reply inside a bordered card with a **Copy** button. Works inside `chat-colors` bubbles. |
+| [`message-rail`](plugins/message-rail) | A side pane with one tick per message you sent: click to jump, hover to see the prompt and Claude's reply. Folds long messages; `/rail` toggles it. |
+| [`status-band`](plugins/status-band) | One band above the prompt: files edited but not yet tested, context size, session cost, and branch / PR / CI / commits behind main. Toasts once when cost passes a limit you set. |
+| [`rtl-arabic`](plugins/rtl-arabic) | When you write in Arabic, adds a right-to-left formatting rule to the conversation once (again after a compaction). |
+| [`speak-reply`](plugins/speak-reply) | 🔊 / ⏹ buttons on each reply, plus `/speak` and `/stop-speak`. Reads the reply in Egyptian Arabic through the free [VoiceTut-TTS](https://huggingface.co/spaces/mohammedaly22/VoiceTut-TTS) Space, falling back to edge-tts `ar-EG-SalmaNeural`. macOS only (plays with `afplay`). |
+| [`fleet`](plugins/fleet) | Tracks runs of `*-delegate/scripts/relay.mjs`: a `/delegations` pane and a toast when each one finishes. |
+
 ---
 
 ## Install
@@ -66,6 +80,25 @@ npx skills add https://github.com/ElGenius-developer/ai-skills --skill '*'
 ```
 
 Useful flags: `-g` installs globally (`~/.claude/skills/`) instead of into the current project, `-a claude-code` targets a specific agent, `-y` skips prompts for CI.
+
+### Plugins — via the plugin marketplace
+
+This repo is a Claude Code plugin marketplace. In Claude Code:
+
+```
+/plugin marketplace add ElGenius-developer/ai-skills
+/plugin install chat-colors@ai-skills
+```
+
+Swap `chat-colors` for any plugin in the table above.
+
+`speak-reply` needs its Python environment once after install, inside the plugin folder:
+
+```bash
+python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+```
+
+Set `SPEAK_REPLY_SPEAKER` to choose another VoiceTut speaker.
 
 ### Skills — via `install.sh`
 

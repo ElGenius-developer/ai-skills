@@ -1,0 +1,13 @@
+{
+  "name": "ai-skills",
+  "owner": { "name": "Ahmed Ashraf", "url": "https://github.com/ElGenius-developer" },
+  "plugins": [
+    { "name": "chat-colors", "source": "./plugins/chat-colors", "description": "Draws your prompts and Claude's replies as colored chat bubbles" },
+    { "name": "code-card", "source": "./plugins/code-card", "description": "Code blocks in a bordered card with a Copy button" },
+    { "name": "message-rail", "source": "./plugins/message-rail", "description": "A side rail of your messages with jump, hover preview, and folding" },
+    { "name": "status-band", "source": "./plugins/status-band", "description": "Band above the prompt: unverified edits, context, session cost, branch/PR/CI" },
+    { "name": "rtl-arabic", "source": "./plugins/rtl-arabic", "description": "Adds the Arabic RTL rule once per conversation, only when you write in Arabic" },
+    { "name": "speak-reply", "source": "./plugins/speak-reply", "description": "Read Claude's reply aloud in Egyptian Arabic (macOS)" },
+    { "name": "fleet", "source": "./plugins/fleet", "description": "Tracks *-delegate relay runs: a /delegations pane and a toast when each finishes" }
+  ]
+}
