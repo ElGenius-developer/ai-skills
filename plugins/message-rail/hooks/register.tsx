@@ -168,7 +168,8 @@ export const register: Register = on => {
   })
 
   on('classic.SessionStart', async ($, e, next) => {
-    if (e.source === 'clear') {
+    // /clear, /resume and a fork switch to another conversation in the same process
+    if (e.source === 'clear' || e.source === 'resume' || e.source === 'fork') {
       entries.clear()
       visible.clear()
       overrides.clear()

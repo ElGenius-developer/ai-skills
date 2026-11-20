@@ -101,6 +101,26 @@ test('the newest prompt\'s card shows Claude\'s latest reply', async ($, on) => 
   await ui.unmount()
 })
 
+test('after /resume the rail shows only the resumed session\'s prompts', async ($, on) => {
+  mock.clock(on)
+  on('ui.render', () => engine)
+  on('classic.SessionStart', () => ({}))
+  const resumed = [
+    { type: 'user', uuid: 'b1', message: { role: 'user', content: 'Resumed question' } },
+    { type: 'assistant', uuid: 'b2', message: { role: 'assistant', content: [{ type: 'text', text: 'Resumed answer' }] } },
+  ]
+  on('fs.read', () => ({ value: resumed.map(r => JSON.stringify(r)).join('\n') }))
+
+  const old = await $.ui.mount(userRow('a1', 'Old session prompt'))
+  await old.unmount()
+  await $.classic.SessionStart({ source: 'resume', transcript_path: '/t/b.jsonl' } as never)
+
+  const ui = await $.ui.mount(pane('terminal'))
+  expect(await ui.find({ type: 'Text', text: /Resumed question/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /Old session prompt/ })).toBeUndefined()
+  await ui.unmount()
+})
+
 test('a long message folds to one line and unfolds back to Claude Code\'s drawing', async ($, on) => {
   mock.clock(on)
   on('ui.render', () => engine)
