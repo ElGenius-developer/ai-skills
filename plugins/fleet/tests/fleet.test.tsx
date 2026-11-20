@@ -16,6 +16,7 @@ test('two relays in one repo each settle on their own out-dir, never a sibling r
 
   expect([first, second]).toEqual(['/t/app-2026-11-20T10-00-01-000Z', '/t/app-2026-11-20T10-00-05-000Z'])
   expect(pickOutDir('/t', entries, 'app', 20_000, new Set())).toBeNull()
+  expect(pickOutDir('/t', [dir('app-admin-2026-11-20T10-00-00-000Z', 10_000)], 'app', 10_000, new Set())).toBeNull()
 })
 
 test('a relay launch is read for its lane, repo and out-dir; other commands are not', () => {

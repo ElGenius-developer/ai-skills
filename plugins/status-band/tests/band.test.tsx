@@ -35,8 +35,9 @@ test('only running a check counts as verifying, not reading its config', () => {
 })
 
 test('a check whose exit code is hidden or that runs nothing does not count as verifying', () => {
-  for (const command of ['php artisan test 2>&1 | tail -20', 'npm test || true', 'vendor/bin/phpunit; echo done', 'tsc --version', 'pytest --collect-only', 'npx vitest --help'])
+  for (const command of ['php artisan test 2>&1 | tail -20', 'npm test || true', 'vendor/bin/phpunit; echo done', 'php artisan test --filter=Foo\nphp artisan test --filter=Bar', 'npm test & wait', 'tsc --version', 'pytest --collect-only', 'pytest --co', 'npx vitest --help'])
     expect([command, isVerifyCommand(command)]).toEqual([command, false])
+  expect(isVerifyCommand('php artisan test 2>&1')).toBe(true)
 })
 
 test('the context line shows tokens in thousands and the share of the window', () => {

@@ -3,14 +3,14 @@ import type { StatusBandContext, StatusBandGit } from '../types'
 const VERIFY_TOOL =
   /^(?:(?:npx|pnpm|yarn|bunx?|php)\s+)?(?:\.\/)?(vendor\/bin\/(pint|phpunit|pest)|artisan test|vitest|(npm|pnpm|yarn) (run )?(test|lint)|eslint|flutter (test|analyze)|dart analyze|tsc|composer test|pytest)\b/
 
-const RUNS_NO_CHECK = /\s--(version|help|collect-only)\b/
+const RUNS_NO_CHECK = /\s--(version|help|collect-only|co)\b/
+// A pipe, `||`, `;`, a newline or a background `&` lets a later command set the exit code.
+// `&&` and redirects such as `2>&1` keep the check's own exit code.
+const HIDES_EXIT_CODE = /[|;\n]|(?<![&>])&(?![&>])/
 
-/**
- * True when one segment of the command runs a test, lint or type check, not merely mentions one.
- * A pipe, `||` or `;` lets a later command set the exit code, so such a chain proves nothing.
- */
+/** True when one segment of the command runs a test, lint or type check whose exit code the command returns. */
 export function isVerifyCommand(command: string): boolean {
-  if (/[|;]/.test(command)) return false
+  if (HIDES_EXIT_CODE.test(command)) return false
   return command
     .split('&&')
     .map(segment => segment.trim())
