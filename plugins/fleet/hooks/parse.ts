@@ -4,7 +4,7 @@ const PREFIX = /^\s*(?:[A-Za-z_]\w*=\S*\s+)*(?:(?:nohup|exec|time)\s+)*node\s+/
 const SCRIPT = /^(["']?)[^\s"']*?([a-z]+)-delegate\/scripts\/relay\.mjs\1(?=\s|$)/
 const HELP = /(?:^|\s)(--help|-h)(?=\s|$)/
 const SAFE_PATH = /^[A-Za-z0-9_./-]+$/
-const HEREDOC = /^<<(-?)\s*\\?(["']?)([A-Za-z_]\w*)\2/
+const HEREDOC = /^<<(-?)\s*\\?(["']?)([^\s"'<>;&|()]+)\2/
 
 /**
  * The command with quoted text and heredoc bodies blanked to 'x' and backslash-newlines to
@@ -18,11 +18,11 @@ export function maskShell(command: string): string {
   while (i < command.length) {
     const c = command[i]!
     if (quote) {
-      if (c === quote) {
+      if (c === quote.at(-1)) {
         quote = null
       } else {
         out[i] = 'x'
-        if (quote === '"' && c === '\\' && i + 1 < command.length) out[++i] = 'x'
+        if (quote !== "'" && c === '\\' && i + 1 < command.length) out[++i] = 'x'
       }
       i++
       continue
@@ -32,8 +32,14 @@ export function maskShell(command: string): string {
       i += 2
       continue
     }
+    // A word that starts with # is a comment to the end of the line
+    if (c === '#' && (i === 0 || /[\s;&|(]/.test(command[i - 1]!))) {
+      while (i < command.length && command[i] !== '\n') out[i++] = 'x'
+      continue
+    }
     if (c === '"' || c === "'") {
-      quote = c
+      // $'...' takes backslash escapes, as "..." does
+      quote = c === "'" && command[i - 1] === '$' ? "$'" : c
       i++
       continue
     }
@@ -107,7 +113,7 @@ export function withOutDir(command: string, insertAt: number, dir: string): stri
 
 /** A relay makes its out-dir within a second of starting; one with none after this likely never started. */
 export const NEVER_STARTED_MS = 30_000
-/** A relay still with no out-dir after this is given up as failed. */
+/** A lost relay waiting longer than this can be cleared; it is still polled until then. */
 export const GIVE_UP_MS = 15 * 60_000
 
 export function basename(path: string): string {
