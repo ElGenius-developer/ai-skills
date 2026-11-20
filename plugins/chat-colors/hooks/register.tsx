@@ -12,16 +12,19 @@ export const register: Register = (on, options) => {
   const userColor = String(options.userColor ?? 'cyan')
   const claudeColor = String(options.claudeColor ?? 'claude')
 
-  on('ui.render', { component: 'UserMessage' }, ($, e, next) => {
+  // Calls next so plugins beneath (message-rail's fold button and position
+  // tracking) still run; only the engine's own node becomes the colored prompt.
+  on('ui.render', { component: 'UserMessage' }, async ($, e, next) => {
     // ctrl+o expands a row: keep the engine's full view there, and leave
     // task notifications and peer messages as the engine draws them.
     if (e.props.isExpanded || e.props.origin.kind !== 'composer') return next(e)
 
     const { Box, Text } = $.ui.resolve(e)
+    const body = replaceEngineNode(await next(e), <Text color={userColor}>{e.props.text}</Text>)
     return (
       <Box flexDirection="column" borderStyle="round" borderColor={userColor} paddingX={1} marginTop={1}>
         <Text bold color={userColor}>You</Text>
-        <Text color={userColor}>{e.props.text}</Text>
+        {body as RenderElement}
       </Box>
     )
   })
