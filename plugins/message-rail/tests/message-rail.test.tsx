@@ -173,6 +173,28 @@ test('a fork whose transcript cannot be read keeps every prompt, in order', asyn
   await ui.unmount()
 })
 
+test('resuming a conversation too big to read keeps the one just left off the rail', async ($, on) => {
+  mock.clock(on)
+  on('ui.render', () => engine)
+  on('classic.SessionStart', () => ({}))
+  on('fs.read', () => {
+    throw new Error('over the read limit')
+  })
+
+  const left = await $.ui.mount(userRow('z1', 'Zed prompt'))
+  await left.unmount()
+  await $.classic.SessionStart({ source: 'resume', transcript_path: '/t/big.jsonl' } as never)
+  const redrawn = await $.ui.mount(userRow('z1', 'Zed prompt'))
+  await redrawn.unmount()
+  const resumed = await $.ui.mount(userRow('y1', 'Why prompt'))
+  await resumed.unmount()
+
+  const ui = await $.ui.mount(pane('terminal'))
+  expect(await ui.find({ type: 'Text', text: /Why prompt/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /Zed prompt/ })).toBeUndefined()
+  await ui.unmount()
+})
+
 test('two resumes in a row keep both left conversations off the rail', async ($, on) => {
   const clock = mock.clock(on)
   on('ui.render', () => engine)

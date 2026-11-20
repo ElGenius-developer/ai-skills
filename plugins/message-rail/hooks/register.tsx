@@ -187,12 +187,15 @@ export const register: Register = on => {
     }
     const canRead = typeof e.transcript_path === 'string' && e.source !== 'clear'
     if (canRead && !(await loadTranscript($, e.transcript_path)) && isSwitch) {
-      // ponytail: no transcript to tell old rows from new; a resume refills from what draws, old rows may slip back
+      // ponytail: no transcript to tell old rows from new; only the conversation just left stays off,
+      // so prompts of ones left earlier can show again if they draw
+      stale.clear()
       if (e.source === 'fork') {
         kept.forEach((entry, id) => entries.set(id, entry))
         nextOrder = keptOrder
+      } else {
+        kept.forEach((_, id) => stale.add(id))
       }
-      stale.clear()
     }
     // A fork, or resuming back, brings the same row ids
     for (const id of entries.keys()) stale.delete(id)
