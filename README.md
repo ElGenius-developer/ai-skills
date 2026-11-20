@@ -54,7 +54,6 @@ Interface plugins built on Claude Code's plugin hooks API (a `hooks/register.tsx
 | [`message-rail`](plugins/message-rail) | A side pane with one tick per message you sent: click to jump, hover to see the prompt and Claude's reply. Folds long messages; `/rail` toggles it. |
 | [`status-band`](plugins/status-band) | One band above the prompt: files edited but not yet tested, context size, session cost, and branch / PR / CI / commits behind main. Toasts once when cost passes a limit you set. |
 | [`rtl-arabic`](plugins/rtl-arabic) | When you write in Arabic, adds a right-to-left formatting rule to the conversation once (again after a compaction). |
-| [`speak-reply`](plugins/speak-reply) | 🔊 / ⏹ buttons on each reply, plus `/speak` and `/stop-speak`. Reads the reply in Egyptian Arabic through the free [VoiceTut-TTS](https://huggingface.co/spaces/mohammedaly22/VoiceTut-TTS) Space, falling back to edge-tts `ar-EG-SalmaNeural`. macOS only (plays with `afplay`). |
 | [`fleet`](plugins/fleet) | Tracks runs of `*-delegate/scripts/relay.mjs`: a `/delegations` pane and a toast when each one finishes. |
 
 ---
@@ -91,14 +90,6 @@ This repo is a Claude Code plugin marketplace. In Claude Code:
 ```
 
 Swap `chat-colors` for any plugin in the table above.
-
-`speak-reply` needs its Python environment once after install, inside the plugin folder:
-
-```bash
-python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
-```
-
-Set `SPEAK_REPLY_SPEAKER` to choose another VoiceTut speaker.
 
 ### Skills — via `install.sh`
 
