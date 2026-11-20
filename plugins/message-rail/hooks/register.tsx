@@ -20,6 +20,8 @@ const visible = new Set<string>()
 // Per-message collapse choices, keyed `${kind}:${id}`; otherwise the kind's default
 const overrides = new Map<string, boolean>()
 const defaults: Record<Kind, boolean> = { user: false, assistant: false }
+// Prompts of conversations left by /clear, /resume or a fork; their rows keep drawing until the transcript is cut
+const stale = new Set<string>()
 let isRedrawQueued = false
 
 export function isLong(text: string): boolean {
@@ -79,6 +81,7 @@ export function parseTranscript(jsonl: string): Turn[] {
 
 // Adds a prompt; true when the rail changed
 function remember(id: string, text: string): boolean {
+  if (stale.has(id)) return false
   const known = entries.get(id)
   if (known) {
     if (known.text === text) return false
@@ -134,11 +137,13 @@ function queueRedraw($: any) {
   })
 }
 
-async function loadTranscript($: any, path: string) {
+// False when missing or over the 4 MiB read limit: the rail then fills from what the transcript draws
+async function loadTranscript($: any, path: string): Promise<boolean> {
   try {
     loadEntries(parseTranscript(await $.fs.read(path)))
+    return true
   } catch {
-    // Missing, or over the 4 MiB read limit: the rail fills from what the transcript draws
+    return false
   }
 }
 
@@ -168,15 +173,32 @@ export const register: Register = on => {
   })
 
   on('classic.SessionStart', async ($, e, next) => {
-    if (e.source === 'clear') {
+    // /clear, /resume and a fork switch to another conversation in the same process
+    const isSwitch = e.source === 'clear' || e.source === 'resume' || e.source === 'fork'
+    const kept = new Map(entries)
+    const keptOrder = nextOrder
+    if (isSwitch) {
+      // Marked before the read: the left conversation's rows keep drawing until the transcript is cut
+      for (const id of entries.keys()) stale.add(id)
       entries.clear()
       visible.clear()
       overrides.clear()
       nextOrder = 0
     }
-    if (typeof e.transcript_path === 'string' && e.source !== 'clear') {
-      await loadTranscript($, e.transcript_path)
+    const canRead = typeof e.transcript_path === 'string' && e.source !== 'clear'
+    if (canRead && !(await loadTranscript($, e.transcript_path)) && isSwitch) {
+      // ponytail: no transcript to tell old rows from new; only the conversation just left stays off,
+      // so prompts of ones left earlier can show again if they draw
+      stale.clear()
+      if (e.source === 'fork') {
+        kept.forEach((entry, id) => entries.set(id, entry))
+        nextOrder = keptOrder
+      } else {
+        kept.forEach((_, id) => stale.add(id))
+      }
     }
+    // A fork, or resuming back, brings the same row ids
+    for (const id of entries.keys()) stale.delete(id)
     $.ui.invalidate('ui.render')
     return next(e)
   }).catch(async ($, e, next) => next(e))

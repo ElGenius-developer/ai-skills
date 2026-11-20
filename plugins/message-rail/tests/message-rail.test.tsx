@@ -101,6 +101,127 @@ test('the newest prompt\'s card shows Claude\'s latest reply', async ($, on) => 
   await ui.unmount()
 })
 
+test('after /resume the rail shows only the resumed session\'s prompts', async ($, on) => {
+  const clock = mock.clock(on)
+  on('ui.render', () => engine)
+  on('classic.SessionStart', () => ({}))
+  const resumed = [
+    { type: 'user', uuid: 'b1', message: { role: 'user', content: 'Resumed question' } },
+    { type: 'assistant', uuid: 'b2', message: { role: 'assistant', content: [{ type: 'text', text: 'Resumed answer' }] } },
+  ]
+  on('fs.read', () => ({ value: resumed.map(r => JSON.stringify(r)).join('\n') }))
+
+  const old = await $.ui.mount(userRow('a1', 'Old session prompt'))
+  await old.unmount()
+  await $.classic.SessionStart({ source: 'resume', transcript_path: '/t/b.jsonl' } as never)
+  // The old row stays on screen until the transcript is cut, however long that takes
+  await clock.advance(5_000)
+  const redrawn = await $.ui.mount(userRow('a1', 'Old session prompt'))
+  await redrawn.unmount()
+
+  const ui = await $.ui.mount(pane('terminal'))
+  expect(await ui.find({ type: 'Text', text: /Resumed question/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /Old session prompt/ })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('an old row that redraws while the resumed transcript is still being read stays off the rail', async ($, on) => {
+  const clock = mock.clock(on)
+  on('ui.render', () => engine)
+  on('classic.SessionStart', () => ({}))
+  const resumed = { type: 'user', uuid: 'c1', message: { role: 'user', content: 'Slow resumed question' } }
+  on('fs.read', async () => {
+    await clock.sleep(100)
+    return { value: JSON.stringify(resumed) }
+  })
+
+  const old = await $.ui.mount(userRow('o1', 'Left prompt'))
+  await old.unmount()
+  let isDone = false
+  const starting = $.classic.SessionStart({ source: 'resume', transcript_path: '/t/c.jsonl' } as never).then(() => { isDone = true })
+  await clock.settle()
+  expect(isDone).toBe(false)
+  const redrawn = await $.ui.mount(userRow('o1', 'Left prompt'))
+  await redrawn.unmount()
+  await clock.advance(100)
+  await starting
+
+  const ui = await $.ui.mount(pane('terminal'))
+  expect(await ui.find({ type: 'Text', text: /Slow resumed question/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /Left prompt/ })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('a fork whose transcript cannot be read keeps every prompt, in order', async ($, on) => {
+  mock.clock(on)
+  on('ui.render', () => engine)
+  on('classic.SessionStart', () => ({}))
+  on('fs.read', () => {
+    throw new Error('over the read limit')
+  })
+
+  for (const [id, text] of [['f1', 'First one'], ['f2', 'Second one'], ['f3', 'Third one']]) {
+    const row = await $.ui.mount(userRow(id!, text!))
+    await row.unmount()
+  }
+  await $.classic.SessionStart({ source: 'fork', transcript_path: '/t/big.jsonl' } as never)
+
+  const ui = await $.ui.mount(pane('terminal'))
+  expect(await ui.find({ type: 'Text', text: /Second one/ })).toBeDefined()
+  expect((await ui.find({ key: 'jump-f1' }))?.props.label).toBe('Jump to message 1')
+  expect((await ui.find({ key: 'jump-f3' }))?.props.label).toBe('Jump to message 3')
+  await ui.unmount()
+})
+
+test('resuming a conversation too big to read keeps the one just left off the rail', async ($, on) => {
+  mock.clock(on)
+  on('ui.render', () => engine)
+  on('classic.SessionStart', () => ({}))
+  on('fs.read', () => {
+    throw new Error('over the read limit')
+  })
+
+  const left = await $.ui.mount(userRow('z1', 'Zed prompt'))
+  await left.unmount()
+  await $.classic.SessionStart({ source: 'resume', transcript_path: '/t/big.jsonl' } as never)
+  const redrawn = await $.ui.mount(userRow('z1', 'Zed prompt'))
+  await redrawn.unmount()
+  const resumed = await $.ui.mount(userRow('y1', 'Why prompt'))
+  await resumed.unmount()
+
+  const ui = await $.ui.mount(pane('terminal'))
+  expect(await ui.find({ type: 'Text', text: /Why prompt/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /Zed prompt/ })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('two resumes in a row keep both left conversations off the rail', async ($, on) => {
+  const clock = mock.clock(on)
+  on('ui.render', () => engine)
+  on('classic.SessionStart', () => ({}))
+  const prompt = (uuid: string, content: string) => JSON.stringify({ type: 'user', uuid, message: { role: 'user', content } })
+  on('fs.read', async (_, e) => {
+    if (e.path === '/t/c.jsonl') await clock.sleep(1_500)
+    return { value: e.path === '/t/b.jsonl' ? prompt('b1', 'Bee prompt') : prompt('c1', 'Sea prompt') }
+  })
+
+  const a = await $.ui.mount(userRow('a1', 'Ay prompt'))
+  await a.unmount()
+  await $.classic.SessionStart({ source: 'resume', transcript_path: '/t/b.jsonl' } as never)
+  const toC = $.classic.SessionStart({ source: 'resume', transcript_path: '/t/c.jsonl' } as never)
+  await clock.advance(5_000)
+  await toC
+  for (const [id, text] of [['a1', 'Ay prompt'], ['b1', 'Bee prompt']]) {
+    const row = await $.ui.mount(userRow(id!, text!))
+    await row.unmount()
+  }
+
+  const ui = await $.ui.mount(pane('terminal'))
+  expect(await ui.find({ type: 'Text', text: /Sea prompt/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /Ay prompt|Bee prompt/ })).toBeUndefined()
+  await ui.unmount()
+})
+
 test('a long message folds to one line and unfolds back to Claude Code\'s drawing', async ($, on) => {
   mock.clock(on)
   on('ui.render', () => engine)
