@@ -10,20 +10,22 @@ const jobs = atom({ plugin: 'fleet', key: 'jobs' } as const, [] as FleetJob[])
 const now = atom({ plugin: 'fleet', key: 'now' } as const, 0)
 
 const STATUS_COLOR: Record<string, string> = { running: 'warning', completed: 'success' }
+// "lost": no out-dir in time. Still polled: a relay held behind an earlier step in its command starts late
+const POLLED = new Set(['running', 'lost'])
 
 async function settle($: EngineInterface, job: FleetJob, at: number): Promise<FleetJob> {
   if (!job.outDir) return job
   if (!(await $.fs.exists(job.outDir))) {
     // A relay that dies on a usage error makes no out-dir. A relative --out-dir can't be checked.
-    const isDead = job.outDir.startsWith('/') && job.launchedAt !== null && at - job.launchedAt > NEVER_STARTED_MS
-    return isDead ? { ...job, status: 'failed', finishedAt: at } : job
+    const isLost = job.outDir.startsWith('/') && job.launchedAt !== null && at - job.launchedAt > NEVER_STARTED_MS
+    return isLost ? { ...job, status: 'lost' } : job
   }
-  if (!(await $.fs.exists(`${job.outDir}/result.json`))) return job
+  if (!(await $.fs.exists(`${job.outDir}/result.json`))) return { ...job, status: 'running' }
   let result: { status?: string; touchedFiles?: unknown[] | null }
   try {
     result = JSON.parse(String(await $.fs.read(`${job.outDir}/result.json`)))
   } catch {
-    return job // still being written
+    return { ...job, status: 'running' } // still being written
   }
   return {
     ...job,
@@ -35,15 +37,15 @@ async function settle($: EngineInterface, job: FleetJob, at: number): Promise<Fl
 
 async function poll($: EngineInterface) {
   const list = await read($, jobs)
-  if (!list.some(j => j.status === 'running')) return
+  if (!list.some(j => POLLED.has(j.status))) return
   const t = await $.clock.now()
   await update($, now, () => t)
 
   const settled = new Map<string, FleetJob>()
   for (const job of list) {
-    if (job.status !== 'running') continue
+    if (!POLLED.has(job.status)) continue
     const next = await settle($, job, t)
-    if (next.status !== 'running') {
+    if (!POLLED.has(next.status)) {
       $.ui.toast(`${next.lane} finished: ${next.status}${next.touched !== null ? `, ${next.touched} files` : ''}`)
     }
     settled.set(job.id, next)
@@ -52,7 +54,7 @@ async function poll($: EngineInterface) {
   await update($, jobs, current =>
     current.map(j => {
       const next = settled.get(j.id)
-      if (!next || j.status !== 'running') return j
+      if (!next || !POLLED.has(j.status)) return j
       return { ...j, status: next.status, touched: next.touched, finishedAt: next.finishedAt }
     }),
   )
@@ -77,7 +79,7 @@ export const register: Register = on => {
     // Each launch gets its own out-dir, so finding its result is no guess
     const tmp = ((await $.env.get('TMPDIR')) ?? '/tmp').replace(/\/+$/, '')
     const ownDir = `${tmp}/delegate-relay/fleet-${e.tool_use_id}`
-    const command = launch.outDir ? null : withOutDir(e.command, ownDir)
+    const command = launch.outDir ? null : withOutDir(e.command, launch.insertAt, ownDir)
     const job: FleetJob = {
       id: e.tool_use_id,
       lane: launch.lane,
@@ -99,7 +101,7 @@ export const register: Register = on => {
     await update($, jobs, list =>
       list.map(j => {
         if (j.id !== job.id) return j
-        return isFailed && j.status === 'running'
+        return isFailed && POLLED.has(j.status)
           ? { ...j, launchedAt: at, status: 'failed', finishedAt: at }
           : { ...j, launchedAt: at }
       }),

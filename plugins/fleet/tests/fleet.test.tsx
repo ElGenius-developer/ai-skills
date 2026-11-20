@@ -46,20 +46,39 @@ const outDirOf = (command: string) => command.match(/--out-dir (\S+)/)?.[1]
 const openPane = ($: Engine) =>
   $.ui.mount({ plugin: 'fleet', surface: 'terminal', component: 'Pane', requestId: 'fleet', props: { bodyColumns: 80 } as never })
 
+const rewrite = (command: string, dir = '/t/d') => {
+  const launch = relayLaunch(command)
+  return launch && withOutDir(command, launch.insertAt, dir)
+}
+
 test('a relay launch is read for its lane, repo and out-dir; help and other commands are not', () => {
   expect(relayLaunch(`${RELAY('codex')} --brief b.txt --cd /r/my-app --out-dir "/tmp/x y"`))
-    .toEqual({ lane: 'codex', cd: '/r/my-app', outDir: '/tmp/x y' })
-  expect(relayLaunch(`cat b.txt | ${RELAY('kimi')}`)).toEqual({ lane: 'kimi', cd: null, outDir: null })
+    .toMatchObject({ lane: 'codex', cd: '/r/my-app', outDir: '/tmp/x y' })
+  expect(relayLaunch(`cat b.txt | ${RELAY('kimi')}`)).toMatchObject({ lane: 'kimi', cd: null, outDir: null })
   expect(relayLaunch(`${RELAY('agy')} --help`)).toBeNull()
   expect(relayLaunch('npm test')).toBeNull()
 })
 
-test('the out-dir goes right after the relay script, and only where it needs no quoting', () => {
-  expect(withOutDir(`${RELAY('agy')} --brief b.md && echo ok`, '/t/d'))
-    .toBe(`${RELAY('agy')} --out-dir /t/d --brief b.md && echo ok`)
-  expect(withOutDir(`${RELAY('agy')}`, '/t/d')).toBe(`${RELAY('agy')} --out-dir /t/d`)
-  expect(withOutDir(`${RELAY('agy')} --brief b.md`, '/t/my dir')).toBeNull()
-  expect(withOutDir(`bash -c 'node x/agy-delegate/scripts/relay.mjs' --brief b`, '/t/d')).toBeNull()
+test('reading or grepping the relay script is not a launch', () => {
+  expect(relayLaunch('sed -n 1,50p ~/.agents/skills/agy-delegate/scripts/relay.mjs')).toBeNull()
+  expect(relayLaunch('grep -n brief ~/.agents/skills/agy-delegate/scripts/relay.mjs')).toBeNull()
+})
+
+test('the out-dir goes right after the relay script, quoted path or not', () => {
+  expect(rewrite(`${RELAY('agy')} --brief b.md && echo ok`)).toBe(`${RELAY('agy')} --out-dir /t/d --brief b.md && echo ok`)
+  expect(rewrite(`node "/h/.agents/skills/agy-delegate/scripts/relay.mjs" --brief b.md`))
+    .toBe(`node "/h/.agents/skills/agy-delegate/scripts/relay.mjs" --out-dir /t/d --brief b.md`)
+  expect(rewrite(`cd /r/web && NO_COLOR=1 ${RELAY('codex')} --brief b.md`))
+    .toBe(`cd /r/web && NO_COLOR=1 ${RELAY('codex')} --out-dir /t/d --brief b.md`)
+  expect(rewrite(`${RELAY('agy')} --brief b.md`, '/t/my dir')).toBeNull()
+})
+
+test('a heredoc brief that names the relay or --out-dir is left as written', () => {
+  const brief = `cat > /b/new.md <<'EOF'\nRead scripts/relay.mjs first; ignore -h\nnode x/agy-delegate/scripts/relay.mjs --out-dir here\nEOF\n`
+  const launch = `${RELAY('agy')} --brief /b/new.md`
+  expect(relayLaunch(brief + launch)).toMatchObject({ lane: 'agy', outDir: null })
+  expect(rewrite(brief + launch)).toBe(`${brief}${RELAY('agy')} --out-dir /t/d --brief /b/new.md`)
+  expect(relayLaunch(`cat <<< "node x/agy-delegate/scripts/relay.mjs"`)).toBeNull()
 })
 
 test('each relay runs with an out-dir of its own, and an explicit one is left alone', async ($, on) => {
@@ -110,10 +129,11 @@ test('a brief written in the same command as the launch is not taken for a failu
   const { clock, files, commands } = await startSession($, on)
   await $.tool.call({
     tool: 'Bash',
-    command: `cat > /b/new.md <<'EOF'\nfix it\nEOF\n${RELAY('agy')} --brief /b/new.md`,
+    command: `cat > /b/new.md <<'EOF'\nfix it, see relay.mjs\nEOF\n${RELAY('agy')} --brief /b/new.md`,
     run_in_background: true,
   })
-  files.set(`${outDirOf(commands[0]!)}/brief.txt`, 'fix it')
+  expect(commands[0]).toContain('fix it, see relay.mjs\nEOF')
+  files.set(`${outDirOf(commands[0]!)}/brief.txt`, 'fix it, see relay.mjs')
   await clock.advance(35_000)
 
   const pane = await openPane($)
@@ -121,17 +141,20 @@ test('a brief written in the same command as the launch is not taken for a failu
   expect(await pane.find({ type: 'Text', text: /failed/ })).toBeUndefined()
 })
 
-test('a background relay that never makes its out-dir is marked failed', async ($, on) => {
-  const { clock, toasts } = await startSession($, on)
-  await $.tool.call({ tool: 'Bash', command: `${RELAY('agy')} --brief /b/missing.md --bad-flag`, run_in_background: true })
-  await clock.advance(25_000)
-  expect(toasts).toEqual([])
-  await clock.advance(10_000)
+test('a background relay with no out-dir in time reads lost, and settles if it starts late', async ($, on) => {
+  const { clock, files, commands, toasts } = await startSession($, on)
+  await $.tool.call({ tool: 'Bash', command: `npm ci && ${RELAY('agy')} --brief /b/one.md`, run_in_background: true })
+  await clock.advance(35_000)
 
-  expect(toasts).toEqual(['agy finished: failed'])
-  const pane = await openPane($)
-  expect(await pane.find({ type: 'Text', text: /failed/ })).toBeDefined()
-  expect(await pane.find({ type: 'Text', text: /running/ })).toBeUndefined()
+  const lost = await openPane($)
+  expect(await lost.find({ type: 'Text', text: /lost/ })).toBeDefined()
+  expect(await lost.find({ type: 'Text', text: /running/ })).toBeUndefined()
+  await lost.unmount()
+  expect(toasts).toEqual([])
+
+  files.set(`${outDirOf(commands[0]!)}/result.json`, JSON.stringify({ status: 'completed', touchedFiles: ['a'] }))
+  await clock.advance(5_000)
+  expect(toasts).toEqual(['agy finished: completed, 1 files'])
 })
 
 test('a relay that errors in the foreground is marked failed, not left running', async ($, on) => {

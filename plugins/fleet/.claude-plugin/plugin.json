@@ -1,1 +1,1 @@
-{ "name": "fleet", "version": "0.1.4", "description": "Tracks agy/codex/opencode/claude/cursor/kimi delegations: a /delegations pane and a toast when each finishes", "types": "./types/index.d.ts" }
+{ "name": "fleet", "version": "0.1.5", "description": "Tracks agy/codex/opencode/claude/cursor/kimi delegations: a /delegations pane and a toast when each finishes", "types": "./types/index.d.ts" }
