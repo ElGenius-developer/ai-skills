@@ -35,6 +35,7 @@ test('a plugin beneath still draws inside the "You" bubble, with the prompt in t
   expect(await ui.find({ type: 'Text', text: 'You' })).toBeDefined()
   expect(await ui.find({ type: 'Button', label: 'Fold' })).toBeDefined()
   expect((await ui.find({ type: 'Text', text: 'hello there' }))?.props.color).toBe('cyan')
+  expect(JSON.stringify(await ui.find({ type: 'Box' }))).not.toContain('"engine"')
 })
 
 test('a reply opens with a "Claude" label only on its first block', async ($, on) => {
