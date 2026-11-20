@@ -1,0 +1,9 @@
+{
+  "name": "status-band",
+  "version": "0.1.0",
+  "description": "One band above the prompt: unverified edits, session cost, and branch / PR / CI / behind-main",
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "costAlertUsd": { "type": "number", "title": "Cost alert (USD)", "description": "Toast once when the session's cost passes this", "default": 5 }
+  }
+}

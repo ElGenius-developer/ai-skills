@@ -1,0 +1,9 @@
+{
+  "name": "chat-colors",
+  "version": "0.1.6",
+  "description": "Draws your prompts and Claude's replies as colored chat bubbles",
+  "userConfig": {
+    "userColor": { "type": "string", "title": "Your bubble color", "description": "Theme key or color name for your messages", "default": "cyan" },
+    "claudeColor": { "type": "string", "title": "Claude bubble color", "description": "Theme key or color name for Claude's replies", "default": "claude" }
+  }
+}

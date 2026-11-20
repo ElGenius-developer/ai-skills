@@ -1,0 +1,1 @@
+{ "name": "code-card", "version": "0.1.0", "description": "Draws code blocks in Claude's replies inside a bordered card with a Copy button" }
