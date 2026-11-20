@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import type { FleetJob } from '../types'
-import { NEVER_STARTED_MS, basename, elapsed, relayLaunch, withOutDir } from './parse'
+import { GIVE_UP_MS, NEVER_STARTED_MS, basename, elapsed, relayLaunch, withOutDir } from './parse'
 
 const PANE = 'fleet'
 const POLL_MS = 5_000
@@ -13,12 +13,18 @@ const STATUS_COLOR: Record<string, string> = { running: 'warning', completed: 's
 // "lost": no out-dir in time. Still polled: a relay held behind an earlier step in its command starts late
 const POLLED = new Set(['running', 'lost'])
 
+// Finished, or lost long enough that a late start is unlikely
+function isClearable(job: FleetJob, at: number): boolean {
+  if (!POLLED.has(job.status)) return true
+  return job.status === 'lost' && job.launchedAt !== null && at - job.launchedAt > GIVE_UP_MS
+}
+
 async function settle($: EngineInterface, job: FleetJob, at: number): Promise<FleetJob> {
   if (!job.outDir) return job
   if (!(await $.fs.exists(job.outDir))) {
     // A relay that dies on a usage error makes no out-dir. A relative --out-dir can't be checked.
-    const isLost = job.outDir.startsWith('/') && job.launchedAt !== null && at - job.launchedAt > NEVER_STARTED_MS
-    return isLost ? { ...job, status: 'lost' } : job
+    const waited = job.outDir.startsWith('/') && job.launchedAt !== null ? at - job.launchedAt : 0
+    return waited > NEVER_STARTED_MS ? { ...job, status: 'lost' } : job
   }
   if (!(await $.fs.exists(`${job.outDir}/result.json`))) return { ...job, status: 'running' }
   let result: { status?: string; touchedFiles?: unknown[] | null }
@@ -113,7 +119,7 @@ export const register: Register = on => {
     const { Box, Text, Button } = $.ui.resolve(e)
     const list = await read($, jobs)
     const at = await read($, now)
-    const hasFinished = list.some(j => j.status !== 'running')
+    const hasFinished = list.some(j => isClearable(j, at))
 
     return (
       <Box flexDirection="column">
@@ -130,7 +136,7 @@ export const register: Register = on => {
           <Button
             key="clear"
             label="Clear finished"
-            onPress={() => update($, jobs, l => l.filter(j => j.status === 'running'))}
+            onPress={() => update($, jobs, l => l.filter(j => !isClearable(j, at)))}
           />
         )}
       </Box>
