@@ -81,6 +81,29 @@ test('a heredoc brief that names the relay or --out-dir is left as written', () 
   expect(relayLaunch(`cat <<< "node x/agy-delegate/scripts/relay.mjs"`)).toBeNull()
 })
 
+test('a relay named inside quoted text is not a launch', () => {
+  expect(relayLaunch(`git commit -m "docs: launch form\n${RELAY('agy')} --brief b.md"`)).toBeNull()
+  expect(relayLaunch(`echo "done; ${RELAY('agy')} --brief b.md"`)).toBeNull()
+})
+
+test('a quoted separator in an argument does not hide the flags after it', () => {
+  expect(relayLaunch(`${RELAY('agy')} --brief "notes & fixes.md" --cd /r/web --out-dir /o/mine`))
+    .toMatchObject({ cd: '/r/web', outDir: '/o/mine' })
+  expect(relayLaunch(`${RELAY('agy')} --brief "a --out-dir b.md"`)).toMatchObject({ outDir: null })
+  expect(rewrite(`FOO="a b" ${RELAY('agy')} --brief b.md`)).toBe(`FOO="a b" ${RELAY('agy')} --out-dir /t/d --brief b.md`)
+})
+
+test('a launch split over lines with a backslash is still one launch', () => {
+  expect(rewrite(`${RELAY('agy')} \\\n  --brief b.md`)).toBe(`${RELAY('agy')} --out-dir /t/d \\\n  --brief b.md`)
+})
+
+test('heredocs opened as <<\\EOF or closed with CRLF are skipped, and a quoted << opens none', () => {
+  const body = `node x/agy-delegate/scripts/relay.mjs --out-dir x`
+  expect(relayLaunch(`cat > b.md <<\\EOF\n${body}\nEOF\n${RELAY('agy')} --brief b.md`)).toMatchObject({ outDir: null })
+  expect(relayLaunch(`cat > b.md <<EOF\r\n${body}\r\nEOF\r\n${RELAY('agy')} --brief b.md`)).toMatchObject({ outDir: null })
+  expect(relayLaunch(`echo "a << b"\n${RELAY('agy')} --brief b.md`)).toMatchObject({ lane: 'agy' })
+})
+
 test('each relay runs with an out-dir of its own, and an explicit one is left alone', async ($, on) => {
   const { commands } = await startSession($, on)
   await $.tool.call({ tool: 'Bash', command: `${RELAY('agy')} --brief /b/same.md`, run_in_background: true })
@@ -155,6 +178,23 @@ test('a background relay with no out-dir in time reads lost, and settles if it s
   files.set(`${outDirOf(commands[0]!)}/result.json`, JSON.stringify({ status: 'completed', touchedFiles: ['a'] }))
   await clock.advance(5_000)
   expect(toasts).toEqual(['agy finished: completed, 1 files'])
+})
+
+test('"Clear finished" keeps a lost relay, which is given up as failed after a while', async ($, on) => {
+  let isForegroundError = false
+  const { clock, toasts } = await startSession($, on, () => () => ({ result: {} as never, isError: isForegroundError }))
+  await $.tool.call({ tool: 'Bash', command: `npm ci && ${RELAY('agy')} --brief /b/one.md`, run_in_background: true })
+  isForegroundError = true
+  await $.tool.call({ tool: 'Bash', command: `${RELAY('codex')} --brief /b/two.md` })
+  await clock.advance(35_000)
+
+  const pane = await openPane($)
+  await pane.press({ key: 'clear' })
+  expect(await pane.find({ type: 'Text', text: /lost/ })).toBeDefined()
+  await pane.unmount()
+
+  await clock.advance(15 * 60_000)
+  expect(toasts).toEqual(['agy finished: failed'])
 })
 
 test('a relay that errors in the foreground is marked failed, not left running', async ($, on) => {
