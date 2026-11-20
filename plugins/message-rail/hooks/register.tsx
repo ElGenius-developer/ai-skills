@@ -6,7 +6,6 @@ const LONG_CHARS = 240
 const LONG_LINES = 4
 const CARD_WIDTH = 46
 const REPLY_CHARS = 220
-const STALE_MS = 2_000
 const TICK = { rest: '──', here: '───', last: '────' } as const
 
 export type Kind = 'user' | 'assistant'
@@ -21,7 +20,7 @@ const visible = new Set<string>()
 // Per-message collapse choices, keyed `${kind}:${id}`; otherwise the kind's default
 const overrides = new Map<string, boolean>()
 const defaults: Record<Kind, boolean> = { user: false, assistant: false }
-// Prompts of a conversation left by /clear or /resume; their rows can still draw once before the cut
+// Prompts of conversations left by /clear, /resume or a fork; their rows keep drawing until the transcript is cut
 const stale = new Set<string>()
 let isRedrawQueued = false
 
@@ -138,11 +137,13 @@ function queueRedraw($: any) {
   })
 }
 
-async function loadTranscript($: any, path: string) {
+// False when missing or over the 4 MiB read limit: the rail then fills from what the transcript draws
+async function loadTranscript($: any, path: string): Promise<boolean> {
   try {
     loadEntries(parseTranscript(await $.fs.read(path)))
+    return true
   } catch {
-    // Missing, or over the 4 MiB read limit: the rail fills from what the transcript draws
+    return false
   }
 }
 
@@ -174,6 +175,8 @@ export const register: Register = on => {
   on('classic.SessionStart', async ($, e, next) => {
     // /clear, /resume and a fork switch to another conversation in the same process
     const isSwitch = e.source === 'clear' || e.source === 'resume' || e.source === 'fork'
+    const kept = new Map(entries)
+    const keptOrder = nextOrder
     if (isSwitch) {
       // Marked before the read: the left conversation's rows keep drawing until the transcript is cut
       for (const id of entries.keys()) stale.add(id)
@@ -182,18 +185,17 @@ export const register: Register = on => {
       overrides.clear()
       nextOrder = 0
     }
-    if (typeof e.transcript_path === 'string' && e.source !== 'clear') {
-      await loadTranscript($, e.transcript_path)
+    const canRead = typeof e.transcript_path === 'string' && e.source !== 'clear'
+    if (canRead && !(await loadTranscript($, e.transcript_path)) && isSwitch) {
+      // ponytail: no transcript to tell old rows from new; a resume refills from what draws, old rows may slip back
+      if (e.source === 'fork') {
+        kept.forEach((entry, id) => entries.set(id, entry))
+        nextOrder = keptOrder
+      }
+      stale.clear()
     }
     // A fork, or resuming back, brings the same row ids
     for (const id of entries.keys()) stale.delete(id)
-    if (isSwitch) {
-      // ponytail: fixed wait for the cut; rows that draw after it (an unreadable transcript) fill the rail again
-      $.clock.after(STALE_MS, () => {
-        stale.clear()
-        $.ui.invalidate('ui.render')
-      })
-    }
     $.ui.invalidate('ui.render')
     return next(e)
   }).catch(async ($, e, next) => next(e))

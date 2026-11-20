@@ -1,1 +1,1 @@
-{ "name": "message-rail", "version": "0.2.3", "description": "A tick rail of your messages: click a tick to jump to it, hover to see the prompt and Claude's reply, and collapse your messages or Claude's replies" }
+{ "name": "message-rail", "version": "0.2.4", "description": "A tick rail of your messages: click a tick to jump to it, hover to see the prompt and Claude's reply, and collapse your messages or Claude's replies" }
