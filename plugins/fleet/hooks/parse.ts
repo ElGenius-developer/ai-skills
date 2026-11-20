@@ -5,46 +5,49 @@ function flag(command: string, name: string): string | null {
   return m ? (m[1] ?? m[2] ?? m[3] ?? null) : null
 }
 
-export function relayLaunch(command: string): { lane: string; cd: string | null; outDir: string | null } | null {
+export function relayLaunch(
+  command: string,
+): { lane: string; cd: string | null; outDir: string | null; briefPath: string } | null {
   const m = command.match(RELAY)
-  if (!m || !command.includes('--brief')) return null
-  return { lane: m[1]!, cd: flag(command, 'cd'), outDir: flag(command, 'out-dir') }
+  const briefPath = m ? flag(command, 'brief') : null
+  if (!m || !briefPath) return null
+  return { lane: m[1]!, cd: flag(command, 'cd'), outDir: flag(command, 'out-dir'), briefPath }
 }
-
-export type DirEntry = { name: string; kind: string; mtimeMs: number }
 
 /** A relay makes its folder within a second of launch; one with none after this never started. */
 export const NEVER_STARTED_MS = 30_000
-const CLOCK_SKEW_MS = 2_000
+export const CLOCK_SKEW_MS = 2_000
 
-/** When the relay made `<repo>-<ISO time, ':' and '.' as '-'>[-pid]`, or null for another repo's folder. */
-export function folderTime(name: string, repo: string): number | null {
-  if (!name.startsWith(`${repo}-`)) return null
-  const m = name.slice(repo.length + 1).match(/^(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})-(\d{3})Z/)
-  return m ? Date.parse(`${m[1]}T${m[2]}:${m[3]}:${m[4]}.${m[5]}Z`) : null
+/** The repo and time in a relay folder name, `<repo>-<ISO time, ':' and '.' as '-'>[-pid]`. */
+export function folderName(name: string): { repo: string; madeAt: number } | null {
+  const m = name.match(/^(.+)-(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})-(\d{3})Z(?:-\d+)?$/)
+  return m ? { repo: m[1]!, madeAt: Date.parse(`${m[2]}T${m[3]}:${m[4]}:${m[5]}.${m[6]}Z`) } : null
 }
 
+export type Folder = { path: string; repo: string; madeAt: number; brief: string | null }
+export type Launch = { startedAt: number; brief: string | null; repo: string }
+
 /**
- * The out-dir a relay with no --out-dir made for this job: the oldest unclaimed `<repo>-<time>`
- * folder made after the launch and before any later launch in the same repo, so a relay that
- * never started cannot take the next one's folder.
+ * The out-dir a relay with no --out-dir made for this job: the oldest unclaimed folder made
+ * after the launch whose brief.txt holds the job's brief. A relay launched later with the same
+ * brief bounds it, so one that never started cannot take its twin's folder. With no brief to
+ * compare, the oldest unclaimed folder of the job's repo.
  */
 export function pickOutDir(
-  root: string,
-  entries: readonly DirEntry[],
-  repo: string,
-  startedAt: number,
-  otherStarts: readonly number[],
+  folders: readonly Folder[],
+  job: Launch,
+  others: readonly Launch[],
   claimed: ReadonlySet<string>,
 ): string | null {
-  const candidates = entries.flatMap(d => {
-    const madeAt = d.kind === 'dir' ? folderTime(d.name, repo) : null
-    if (madeAt === null || madeAt < startedAt - CLOCK_SKEW_MS) return []
-    if (otherStarts.some(s => s > startedAt && s <= madeAt)) return []
-    const path = `${root}/${d.name}`
-    return claimed.has(path) ? [] : [{ path, madeAt }]
-  })
-  return candidates.sort((a, b) => a.madeAt - b.madeAt)[0]?.path ?? null
+  const laterTwins = job.brief === null ? [] : others.filter(o => o.brief === job.brief && o.startedAt > job.startedAt)
+  const fits = folders.filter(
+    f =>
+      !claimed.has(f.path) &&
+      f.madeAt >= job.startedAt - CLOCK_SKEW_MS &&
+      (job.brief === null ? f.repo === job.repo : f.brief === job.brief) &&
+      !laterTwins.some(o => o.startedAt <= f.madeAt),
+  )
+  return fits.sort((a, b) => a.madeAt - b.madeAt)[0]?.path ?? null
 }
 
 export function basename(path: string): string {
