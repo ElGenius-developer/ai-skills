@@ -105,6 +105,11 @@ test('an apostrophe in a comment or an ANSI-C string opens no quote', () => {
   expect(relayLaunch(`echo a#b && ${RELAY('agy')} --brief b.md`)).toMatchObject({ lane: 'agy' })
 })
 
+test('an arithmetic shift is not a heredoc', () => {
+  expect(relayLaunch(`echo $((1<<3))\n${RELAY('agy')} --brief b.md`)).toMatchObject({ lane: 'agy' })
+  expect(relayLaunch(`echo $(( 1 << 3 ))\n${RELAY('agy')} --brief b.md`)).toMatchObject({ lane: 'agy' })
+})
+
 test('a heredoc tag with a dash still hides its body', () => {
   const body = `node x/codex-delegate/scripts/relay.mjs --brief y`
   expect(relayLaunch(`cat > b.md <<'END-X'\n${body}\nEND-X\n${RELAY('agy')} --brief b.md`)).toMatchObject({ lane: 'agy' })

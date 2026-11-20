@@ -4,7 +4,7 @@ const PREFIX = /^\s*(?:[A-Za-z_]\w*=\S*\s+)*(?:(?:nohup|exec|time)\s+)*node\s+/
 const SCRIPT = /^(["']?)[^\s"']*?([a-z]+)-delegate\/scripts\/relay\.mjs\1(?=\s|$)/
 const HELP = /(?:^|\s)(--help|-h)(?=\s|$)/
 const SAFE_PATH = /^[A-Za-z0-9_./-]+$/
-const HEREDOC = /^<<(-?)\s*\\?(["']?)([^\s"'<>;&|()]+)\2/
+const HEREDOC = /^<<(-?)\s*\\?(["']?)([A-Za-z_][^\s"'<>;&|()]*)\2/
 
 /**
  * The command with quoted text and heredoc bodies blanked to 'x' and backslash-newlines to
