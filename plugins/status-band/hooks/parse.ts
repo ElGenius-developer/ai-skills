@@ -3,12 +3,18 @@ import type { StatusBandContext, StatusBandGit } from '../types'
 const VERIFY_TOOL =
   /^(?:(?:npx|pnpm|yarn|bunx?|php)\s+)?(?:\.\/)?(vendor\/bin\/(pint|phpunit|pest)|artisan test|vitest|(npm|pnpm|yarn) (run )?(test|lint)|eslint|flutter (test|analyze)|dart analyze|tsc|composer test|pytest)\b/
 
-/** True when one segment of the command runs a test, lint or type check, not merely mentions one. */
+const RUNS_NO_CHECK = /\s--(version|help|collect-only)\b/
+
+/**
+ * True when one segment of the command runs a test, lint or type check, not merely mentions one.
+ * A pipe, `||` or `;` lets a later command set the exit code, so such a chain proves nothing.
+ */
 export function isVerifyCommand(command: string): boolean {
+  if (/[|;]/.test(command)) return false
   return command
-    .split(/&&|\|\||;/)
+    .split('&&')
     .map(segment => segment.trim())
-    .some(segment => VERIFY_TOOL.test(segment))
+    .some(segment => VERIFY_TOOL.test(segment) && !RUNS_NO_CHECK.test(segment))
 }
 
 export type Check = { conclusion?: string | null; status?: string | null; state?: string | null }

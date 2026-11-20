@@ -26,6 +26,23 @@ test('a fenced block draws in a card whose Copy puts the code on the clipboard',
   expect(copied).toEqual(['ls -la\necho hi', 'ls -la\necho hi', 'ls -la\necho hi', 'ls -la\necho hi'])
 })
 
+test('an untagged block keeps its first line in the card and in Copy', async ($, on) => {
+  const copied: string[] = []
+  on('ui.copy', (_, e) => {
+    copied.push(e.text)
+    return { value: { isCopied: true } }
+  })
+  on('ui.toast', () => ({ value: undefined }))
+  on('ui.render', () => ({ type: 'engine', ref: 0 }))
+
+  const ui = await $.ui.mount({ ...reply('```\ncd backend\nphp artisan test\n```'), surface: 'desktop' })
+  expect((await ui.find({ type: 'Text', text: /^code$/ }))?.text).toBe('code')
+  await ui.press({ key: 'copy-0-27' })
+  await ui.unmount()
+
+  expect(copied).toEqual(['cd backend\nphp artisan test'])
+})
+
 test('a reply without code is left to the engine', async ($, on) => {
   on('ui.render', ($, e) => {
     const { Text } = $.ui.resolve(e)

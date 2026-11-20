@@ -1,6 +1,22 @@
 import { test, expect, mock } from 'claude-code/testing'
 
-import { relayLaunch } from '../hooks/parse'
+import { pickOutDir, relayLaunch } from '../hooks/parse'
+
+test('two relays in one repo each settle on their own out-dir, never a sibling repo', () => {
+  const dir = (name: string, mtimeMs: number) => ({ name, kind: 'dir' as const, mtimeMs })
+  const entries = [
+    dir('app-2026-11-20T10-00-05-000Z', 10_005),
+    dir('app-2026-11-20T10-00-01-000Z', 10_001),
+    dir('app-admin-2026-11-20T10-00-00-000Z', 10_000),
+  ]
+  const claimed = new Set<string>()
+  const first = pickOutDir('/t', entries, 'app', 10_000, claimed)
+  claimed.add(first!)
+  const second = pickOutDir('/t', entries, 'app', 10_004, claimed)
+
+  expect([first, second]).toEqual(['/t/app-2026-11-20T10-00-01-000Z', '/t/app-2026-11-20T10-00-05-000Z'])
+  expect(pickOutDir('/t', entries, 'app', 20_000, new Set())).toBeNull()
+})
 
 test('a relay launch is read for its lane, repo and out-dir; other commands are not', () => {
   expect(relayLaunch(`node ~/.agents/skills/codex-delegate/scripts/relay.mjs --brief b.txt --cd /r/my-app --out-dir "/tmp/x y"`))

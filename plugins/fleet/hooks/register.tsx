@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import type { FleetJob } from '../types'
-import { basename, elapsed, relayLaunch } from './parse'
+import { basename, elapsed, pickOutDir, relayLaunch } from './parse'
 
 const PANE = 'fleet'
 const POLL_MS = 5_000
@@ -11,18 +11,12 @@ const now = atom({ plugin: 'fleet', key: 'now' } as const, 0)
 
 const STATUS_COLOR: Record<string, string> = { running: 'warning', completed: 'success' }
 
-// A relay given no --out-dir writes to $TMPDIR/delegate-relay/<repo>-<timestamp>;
-// the newest such folder made after the launch, not yet claimed, is this job's.
+// A relay given no --out-dir writes to $TMPDIR/delegate-relay/<repo>-<timestamp>.
 async function findOutDir($: EngineInterface, job: FleetJob, claimed: ReadonlySet<string>): Promise<string | null> {
   const tmp = ((await $.env.get('TMPDIR')) ?? '/tmp').replace(/\/+$/, '')
   const root = `${tmp}/delegate-relay`
   if (!(await $.fs.exists(root))) return null
-  const prefix = `${job.cd ? basename(job.cd) : 'repo'}-`
-  const candidates = (await $.fs.list(root))
-    .filter(d => d.kind === 'dir' && d.name.startsWith(prefix) && d.mtimeMs >= job.startedAt - 5_000)
-    .map(d => `${root}/${d.name}`)
-    .filter(path => !claimed.has(path))
-  return candidates.sort().pop() ?? null
+  return pickOutDir(root, await $.fs.list(root), job.cd ? basename(job.cd) : 'repo', job.startedAt, claimed)
 }
 
 async function settle($: EngineInterface, job: FleetJob, claimed: ReadonlySet<string>): Promise<FleetJob> {

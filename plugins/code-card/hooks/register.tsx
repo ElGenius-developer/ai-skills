@@ -4,7 +4,7 @@ export type Segment =
   | { kind: 'prose'; text: string }
   | { kind: 'code'; language: string; source: string }
 
-const FENCE = /^ {0,3}(`{3,}|~{3,})\s*([\w+#.-]*)[^\n]*\n([\s\S]*?)\n {0,3}\1[`~]*[ \t]*$/gm
+const FENCE = /^ {0,3}(`{3,}|~{3,})[ \t]*([\w+#.-]*)[^\n]*\n([\s\S]*?)\n {0,3}\1[`~]*[ \t]*$/gm
 
 export function splitFences(text: string): Segment[] {
   const segments: Segment[] = []
