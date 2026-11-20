@@ -20,6 +20,8 @@ const visible = new Set<string>()
 // Per-message collapse choices, keyed `${kind}:${id}`; otherwise the kind's default
 const overrides = new Map<string, boolean>()
 const defaults: Record<Kind, boolean> = { user: false, assistant: false }
+// Prompts of a conversation left by /clear or /resume; their rows can still draw once before the cut
+const stale = new Set<string>()
 let isRedrawQueued = false
 
 export function isLong(text: string): boolean {
@@ -79,6 +81,7 @@ export function parseTranscript(jsonl: string): Turn[] {
 
 // Adds a prompt; true when the rail changed
 function remember(id: string, text: string): boolean {
+  if (stale.has(id)) return false
   const known = entries.get(id)
   if (known) {
     if (known.text === text) return false
@@ -169,7 +172,9 @@ export const register: Register = on => {
 
   on('classic.SessionStart', async ($, e, next) => {
     // /clear, /resume and a fork switch to another conversation in the same process
-    if (e.source === 'clear' || e.source === 'resume' || e.source === 'fork') {
+    const isSwitch = e.source === 'clear' || e.source === 'resume' || e.source === 'fork'
+    const left = isSwitch ? [...entries.keys()] : []
+    if (isSwitch) {
       entries.clear()
       visible.clear()
       overrides.clear()
@@ -178,6 +183,12 @@ export const register: Register = on => {
     if (typeof e.transcript_path === 'string' && e.source !== 'clear') {
       await loadTranscript($, e.transcript_path)
     }
+    // A fork keeps the same row ids, so only ids the new transcript lacks are stale;
+    // resuming back into a conversation makes its ids live again
+    for (const id of left) {
+      if (!entries.has(id)) stale.add(id)
+    }
+    for (const id of entries.keys()) stale.delete(id)
     $.ui.invalidate('ui.render')
     return next(e)
   }).catch(async ($, e, next) => next(e))

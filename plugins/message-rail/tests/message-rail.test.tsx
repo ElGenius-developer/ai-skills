@@ -114,6 +114,9 @@ test('after /resume the rail shows only the resumed session\'s prompts', async (
   const old = await $.ui.mount(userRow('a1', 'Old session prompt'))
   await old.unmount()
   await $.classic.SessionStart({ source: 'resume', transcript_path: '/t/b.jsonl' } as never)
+  // The old row is still on screen until the transcript is cut, so it may draw once more
+  const redrawn = await $.ui.mount(userRow('a1', 'Old session prompt'))
+  await redrawn.unmount()
 
   const ui = await $.ui.mount(pane('terminal'))
   expect(await ui.find({ type: 'Text', text: /Resumed question/ })).toBeDefined()
