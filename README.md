@@ -27,6 +27,7 @@ Built for [Claude Code](https://claude.com/claude-code), and installable into ~7
 | [`git-pr-merge`](skills/git-pr-merge) | Takes a clean branch from "ready" to "merged": push → open PR → structured diff review → wait for CI → squash-merge, with an approval gate at every state change. |
 | [`pr-guard`](skills/pr-guard) | Review-and-merge gate for an **existing** PR: parallel security / code-review / clean-code / test-quality lenses, real test runs, CI + conflict checks, a written review report — then a squash merge that only happens on explicit user approval. CRITICAL/HIGH findings block the merge. Supports a thin per-project wrapper skill for repo-specific gates. |
 | [`sql-server-dba`](skills/sql-server-dba) | SQL Server / T-SQL assistant: query optimization, stored-procedure patterns, index design, security review, and DMV-based performance troubleshooting. |
+| [`token-context-optimizer`](skills/token-context-optimizer) | Audits and shrinks the tokens a coding session burns before the first prompt: measures a baseline, installs context-budget hooks, inventories skills/agents/plugins by real usage, slims always-loaded files without losing text, then re-measures. |
 
 The three `git-*` skills form a pipeline — **review → resolve → merge** — but each works standalone.
 
@@ -183,6 +184,7 @@ Skills are Markdown; they need nothing installed. The bundled **scripts** and **
 | `block-push-to-main.sh` | `bash`, `git`, `python3` | `python3` parses the hook's JSON stdin. |
 | `pr-footprint.sh` | `bash`, `git`, `python3`, `gh` | Posts a PR comment; needs push/comment scope. |
 | `proof-of-execution.sh` | `bash`, `jq` | `jq` reads the session transcript. |
+| `token-context-optimizer` scripts and hooks | `python3`, `bash`, `jq` | `gh` (optional) for the handoff PR lookup; the `claude` CLI for `measure_context.py fresh`. |
 
 Tested on macOS and Linux. Windows users should run these under WSL or Git Bash.
 
@@ -229,6 +231,17 @@ Squash-merge is the default and only changes if you name a different strategy in
 Primary target is SQL Server via the `sqlsrv` driver, including Laravel/Eloquent queries that land on it. MySQL/PostgreSQL equivalents live in [`references/cross-db.md`](skills/sql-server-dba/references/cross-db.md); DMV-based performance investigation lives in [`references/performance-dmvs.md`](skills/sql-server-dba/references/performance-dmvs.md).
 
 Examples use a generic `Orders` / `Customers` / `OrderLines` schema with a `Tenant_ID` column, since multi-tenant scoping is where most SQL review findings actually come from.
+
+### `token-context-optimizer`
+
+Measures what a fresh session loads before the first prompt (CLAUDE.md, memory, rules, skill/agent/plugin descriptions, hook output), then shrinks it in phases: install context-budget hooks, inventory skills/agents/plugins by real transcript usage, slim always-loaded files, re-measure. `check_no_loss.py` and `check_memory_links.py` verify a slimmed file lost no text and no memory link broke.
+
+Approval gates: every change to a repo goes through a branch and PR, global files are edited only after approval with a backup first, and the installer merges into `settings.json` append-only and skips entries already present. It never disables a skill, agent or plugin without explicit approval; unused ones are listed, not removed.
+
+```bash
+python3 skills/token-context-optimizer/scripts/inventory.py --repo <repo>
+bash skills/token-context-optimizer/scripts/install_budget_hooks.sh
+```
 
 ### `direct`
 
@@ -277,6 +290,7 @@ Being explicit about what has and hasn't been exercised:
 | `block-push-to-main.sh` | **Verified** — blocks `origin main` and `HEAD:main`, allows feature branches and non-push commands. |
 | `proof-of-execution.sh` | **Verified** — blocks a bare `[STATUS]: done` and an empty `[STDOUT]:` block; allows a real one and allows text with no claim. |
 | `install.sh` | **Verified** — all/subset/`--force`/unknown-name/empty-name paths. |
+| `token-context-optimizer` | **Verified** — budget hook warn / block / `continue:false` paths with synthetic transcripts; installer idempotency against a temp settings file; `check_no_loss.py` success and failure; `check_memory_links.py` on a real memory dir; `measure_context.py` transcript mode. **Not yet exercised:** `measure_context.py fresh` in this generic copy, and a full end-to-end run on a second repo. |
 | `git-conflict-resolve` | **Not yet exercised end-to-end.** It has no script, so its per-block approval loop has only been reviewed, not run against a real conflict. Treat it as the least battle-tested skill here. |
 | `pr-footprint.sh` | **Not yet exercised** against a live PR. |
 
